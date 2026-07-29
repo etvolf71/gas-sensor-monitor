@@ -67,6 +67,10 @@
     /* ─── reset & base ─── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html, body {
+     overflow-x: hidden;
+    }
+
     body {
       background: var(--bg);
       color: var(--text);
@@ -493,7 +497,7 @@
     }
 
     .nav-current-label {
-      font-family: var(--font-body);
+      font-family: var(--font-);
       font-size: 13px;
       font-weight: 600;
       color: var(--text-muted);
@@ -552,7 +556,7 @@
     .spread-stats {
       display: flex;
       gap: 16px;
-      font-family: var(--font-body);
+      font-family: var(--font-);
       font-size: 11px;
       color: var(--text-muted);
     }
@@ -566,7 +570,7 @@
       margin-top: 24px;
       padding: 12px 0;
       border-top: 1px solid var(--border);
-      font-family: var(--font-body);
+      font-family: var(--font-);
       font-size: 10px;
       color: var(--text-muted);
       display: flex;
@@ -1050,5 +1054,5 @@
 
   <script src="wave-bg.js"></script>
 
-</body>
+</>
 </html>
