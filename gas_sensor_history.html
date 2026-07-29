@@ -1,0 +1,1796 @@
+<!-- etv html for gas sensor dashboard data history -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCP Gas Sensor History</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pliant:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ambient animated background, ported from a 21st.dev canvas component — see wave-bg.js -->
+  <canvas id="wave-bg"></canvas>
+
+  <div id="app">
+    <div class="nav-bar">
+      <img class="brand-logo" src="frellmann-logo.png" alt="Frellmann Water Technologies">
+      <div class="nav-links">
+        <a class="nav-btn" href="gas_sensor_dashboard.html">Dashboard</a>
+        <span class="nav-current-label">History</span>
+        <a class="nav-btn" href="gas_sensor_records.html">Records</a>
+      </div>
+    </div>
+    <div id="header">
+      <div class="header-title">PCP Gas Sensor History</div>
+      <div class="header-device">GIGA_R1_Sensor_Array_01</div>
+    </div>
+    <div id="controls"></div>
+    <div id="status"></div>
+    <div id="summary"></div>
+    <div id="graph-section"></div>
+    <div id="co2-graph-section"></div>
+    <div id="voltage-graph-section"></div>
+    <div id="footer"></div>
+  </div>
+
+  <style>
+    /* ─── reset & base ─── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+    background: #0b1017;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    min-height: 100vh;
+    }
+
+    #app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    position: relative;
+    z-index: 1;
+    }
+
+    /* ─── ambient wave background (wave-bg.js) ─── */
+    #wave-bg {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    pointer-events: none;
+    }
+
+    /* ─── nav bar ─── */
+    .nav-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 16px;
+    }
+
+    /* logo's own background was removed at the pixel level (see frellmann-logo.png) —
+       nothing but the white wordmark renders, so it sits directly on the wave */
+    .brand-logo {
+    height: 60px;
+    width: auto;
+    display: block;
+    }
+
+    .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    }
+
+    .nav-btn,
+    .csv-export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s ease;
+    }
+
+    .nav-btn:hover,
+    .csv-export-btn:hover {
+    color: #1ce5d4;
+    }
+
+    .nav-current-label {
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a5c72;
+    }
+
+    /* ─── header ─── */
+    .header-title {
+    font-family: 'Pliant', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 4px;
+    }
+
+    .header-device {
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    color: #4a5c72;
+    margin-bottom: 20px;
+    }
+
+    /* ─── time range control ─── */
+    #controls {
+    position: relative;
+    margin-bottom: 20px;
+    }
+
+    .controls-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    }
+
+    .controls-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    }
+
+    .range-trigger-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    }
+
+    .range-trigger-btn:hover,
+    .range-trigger-btn.open {
+    color: #1ce5d4;
+    }
+
+    .range-trigger-icon {
+    font-size: 13px;
+    color: #1ce5d4;
+    }
+
+    .range-summary {
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    color: #7f90a5;
+    }
+
+    .fetch-btn {
+    background: #58a6ff20;
+    border: 1px solid #58a6ff;
+    border-radius: 6px;
+    color: #58a6ff;
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 16px;
+    cursor: pointer;
+    }
+
+    .fetch-btn:hover {
+    background: #58a6ff30;
+    }
+
+    /* invisible full-page click-catcher — closes the popover on outside click */
+    .range-popover-catcher {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    display: none;
+    }
+    .range-popover-catcher.open { display: block; }
+
+    /* ─── time range popover — frosted glass over the wave-bg canvas ─── */
+    .range-popover {
+    display: none;
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    z-index: 30;
+    width: 300px;
+    background: rgba(7, 22, 36, 0.3);
+    backdrop-filter: blur(28px) saturate(140%);
+    -webkit-backdrop-filter: blur(28px) saturate(140%);
+    border: 1px solid rgba(36, 48, 68, 0.7);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    }
+    .range-popover.open { display: block; }
+
+    .cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    }
+
+    .cal-title {
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: #d4dce8;
+    }
+
+    .cal-nav-btn {
+    background: #161d27;
+    border: 1px solid #243044;
+    border-radius: 6px;
+    color: #7f90a5;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    }
+    .cal-nav-btn:hover { border-color: #1ce5d4; color: #d4dce8; }
+
+    .cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 4px;
+    }
+    .cal-weekdays span {
+    text-align: center;
+    font-size: 10px;
+    color: #4a5c72;
+    font-weight: 600;
+    padding: 4px 0;
+    }
+
+    .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 16px;
+    }
+
+    .cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #d4dce8;
+    border-radius: 6px;
+    cursor: pointer;
+    }
+    .cal-day:hover { background: #1e2736; }
+    .cal-day.muted { color: #35404f; }
+    .cal-day.today { box-shadow: inset 0 0 0 1px #1ce5d4; }
+    .cal-day.in-range { background: rgba(28,229,212,0.14); border-radius: 0; }
+    .cal-day.range-start { background: #1ce5d4; color: #061218; font-weight: 700; border-radius: 6px 0 0 6px; }
+    .cal-day.range-end { background: #1ce5d4; color: #061218; font-weight: 700; border-radius: 0 6px 6px 0; }
+    .cal-day.range-start.range-end { border-radius: 6px; }
+
+    .range-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+    }
+
+    .range-field-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #4a5c72;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 5px;
+    }
+
+    .range-field-row {
+    display: flex;
+    gap: 8px;
+    }
+
+    .range-input {
+    background: #161d27;
+    border: 1px solid #243044;
+    border-radius: 6px;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+    width: 100%;
+    color-scheme: dark;
+    }
+    .range-input:focus { border-color: #1ce5d4; }
+    .range-input.date-input { flex: 1.4; }
+    .range-input.time-input { flex: 1; }
+
+    .apply-btn {
+    width: 100%;
+    display: block;
+    text-align: center;
+    }
+
+    .tz-note {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 10px;
+    color: #4a5c72;
+    }
+
+    /* ─── summary stats ─── */
+    #summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    }
+
+    .stat-pill {
+    background: transparent;
+    border: none;
+    padding: 10px 16px;
+    min-width: 120px;
+    flex: 1 1 120px;
+    }
+
+    .stat-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: #4a5c72;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+    }
+
+    .stat-value {
+    font-family: 'Pliant', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    }
+
+    /* ─── loading & empty states ─── */
+    .state-message {
+    text-align: center;
+    padding: 40px;
+    color: #4a5c72;
+    font-size: 14px;
+    }
+
+    .state-message .emoji {
+    font-size: 32px;
+    margin-bottom: 12px;
+    }
+
+    /* ─── footer ─── */
+    #footer {
+    margin-top: 24px;
+    padding: 12px 0;
+    border-top: 1px solid #243044;
+    font-family: 'Pliant', sans-serif;
+    font-size: 10px;
+    color: #4a5c72;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    }
+
+    /* ─── graph section ─── */
+    #graph-section {
+    background: transparent;
+    border: none;
+    margin-bottom: 20px;
+    }
+
+    .graph-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(36, 48, 68, 0.6);
+    }
+
+    .graph-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    }
+
+    .graph-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4a5c72;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    }
+
+    .graph-toggle-btn {
+    background: transparent;
+    border: none;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    }
+
+    .graph-toggle-btn:hover {
+    color: #1ce5d4;
+    }
+
+    .scale-toggle {
+    background: transparent;
+    border: none;
+    color: #7f90a5;
+    font-family: 'Pliant', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    }
+
+    .scale-toggle:hover {
+    color: #d4dce8;
+    }
+
+    .scale-toggle.active {
+    color: #1ce5d4;
+    }
+
+    .graph-body {
+    padding: 16px 20px;
+    }
+
+    /* ─── gas filter checkboxes ─── */
+    .gas-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+    }
+
+    .gas-filter {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: #161d27;
+    border: 1px solid #243044;
+    cursor: pointer;
+    font-family: 'Pliant', sans-serif;
+    font-size: 11px;
+    color: #7f90a5;
+    user-select: none;
+    transition: all 0.15s ease;
+    }
+
+    .gas-filter:hover {
+    border-color: #58a6ff40;
+    }
+
+    .gas-filter.active {
+    border-color: var(--gas-color);
+    color: #d4dce8;
+    }
+
+    .gas-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    }
+
+    /* ─── canvas container ─── */
+    .chart-container {
+    position: relative;
+    width: 100%;
+    height: 360px;
+    }
+
+    .chart-container canvas {
+    width: 100%;
+    height: 100%;
+    }
+
+    /* ─── tooltip ─── */
+    .chart-tooltip {
+    display: none;
+    position: absolute;
+    background: #161d27;
+    border: 1px solid #243044;
+    border-radius: 8px;
+    padding: 10px 14px;
+    pointer-events: none;
+    z-index: 10;
+    min-width: 140px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    .chart-tooltip.visible {
+    display: block;
+    }
+
+    .tooltip-time {
+    font-family: 'Pliant', sans-serif;
+    font-size: 10px;
+    color: #4a5c72;
+    margin-bottom: 6px;
+    }
+
+    .tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 2px 0;
+    }
+
+    .tooltip-gas {
+    font-size: 11px;
+    color: #7f90a5;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    }
+
+    .tooltip-swatch {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    }
+
+    .tooltip-value {
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    }
+
+  </style>
+
+  <script>
+
+    // ─── CONFIG ───
+    const API = "https://ulyjh5b6h2.execute-api.us-east-2.amazonaws.com/readings";
+
+    const TIER_COLORS = {
+    normal: "#34d058", alert: "#f0b429", caution: "#e8772e",
+    warning: "#ea4a5a", unknown: "#6a7f96",
+    };
+
+    const TIER_BG = {
+    normal: "rgba(52,208,88,.08)", alert: "rgba(240,180,41,.08)",
+    caution: "rgba(232,119,46,.08)", warning: "rgba(234,74,90,.08)",
+    unknown: "rgba(106,127,150,.06)",
+    };
+
+    const UNITS = { Smoke: "mg/m³"};
+
+    function fmt(v) {
+    if (v == null) return "—";
+    if (Math.abs(v) >= 10000) return v.toFixed(0);
+    if (Math.abs(v) >= 100) return v.toFixed(1);
+    if (Math.abs(v) >= 1) return v.toFixed(2);
+    return v.toFixed(3);
+    }
+
+    function gasUnit(g) {
+    return UNITS[g] || "ppm";
+    }
+
+    function emColor(em) {
+    if (em < 0.5) return TIER_COLORS.normal;
+    if (em < 1.0) return TIER_COLORS.alert;
+    return TIER_COLORS.warning;
+    }
+
+    // ─── TIME RANGE POPOVER ───
+    // "Time Range" button -> popover with a month calendar + start/end date+time
+    // fields -> Apply fetches and closes. No selection yet = defaults to last 1h.
+    var lastData = null;    // most recent fetched records, for CSV export
+
+    var rangeOpen = false;          // is the popover showing
+    var calViewYear, calViewMonth;  // month currently displayed in the calendar
+    var pendingStart = null;        // { y, m, d } — first day clicked/typed, not yet applied
+    var pendingEnd = null;          // { y, m, d } — second day clicked/typed
+    var startTimeStr = "00:00";
+    var endTimeStr = "23:59";
+    var activeRange = null;         // { startMs, endMs, label } — the range currently plotted
+
+    var tzName = (window.Intl && Intl.DateTimeFormat().resolvedOptions().timeZone) || "Local";
+    var MONTH_NAMES = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"];
+    var MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    function pad2(n) { return (n < 10 ? "0" : "") + n; }
+    function dateKey(c) { return c.y * 372 + c.m * 31 + c.d; }
+    function fmtDateInput(c) { return c.y + "-" + pad2(c.m + 1) + "-" + pad2(c.d); }
+
+    function isBetween(c, start, end) {
+    var k = dateKey(c);
+    return k > dateKey(start) && k < dateKey(end);
+    }
+
+    // ─── controls bar + popover render ───
+
+    function renderControls() {
+    var summaryText = activeRange ? activeRange.label : "Last 1 hour";
+
+    var html = '<div class="controls-bar">'
+        + '  <div class="controls-bar-left">'
+        + '    <button class="range-trigger-btn' + (rangeOpen ? ' open' : '') + '" onclick="toggleRangePopover()">'
+        + '      <span class="range-trigger-icon">&#9783;</span> Time Range'
+        + '    </button>'
+        + '    <span class="range-summary">' + summaryText + '</span>'
+        + '    <button class="csv-export-btn" onclick="exportCSV()">Export CSV</button>'
+        + '  </div>'
+        + '</div>';
+
+    html += '<div class="range-popover-catcher' + (rangeOpen ? ' open' : '') + '" onclick="closeRangePopover()"></div>';
+    html += '<div class="range-popover' + (rangeOpen ? ' open' : '') + '">' + renderPopoverContent() + '</div>';
+
+    document.getElementById("controls").innerHTML = html;
+    }
+
+    function renderPopoverContent() {
+    if (!rangeOpen) return '';
+
+    var html = '<div class="cal-header">'
+        + '<button class="cal-nav-btn" onclick="changeMonth(-1)">&#8249;</button>'
+        + '<span class="cal-title">' + MONTH_NAMES[calViewMonth] + ' ' + calViewYear + '</span>'
+        + '<button class="cal-nav-btn" onclick="changeMonth(1)">&#8250;</button>'
+        + '</div>';
+
+    html += '<div class="cal-weekdays"><span>M</span><span>T</span><span>W</span>'
+        + '<span>T</span><span>F</span><span>S</span><span>S</span></div>';
+    html += '<div class="cal-grid">' + buildCalendarCells() + '</div>';
+
+    var startDateVal = pendingStart ? fmtDateInput(pendingStart) : '';
+    var endDateVal = pendingEnd ? fmtDateInput(pendingEnd) : startDateVal;
+
+    html += '<div class="range-fields">'
+        + '  <div>'
+        + '    <div class="range-field-label">Start</div>'
+        + '    <div class="range-field-row">'
+        + '      <input type="date" class="range-input date-input" value="' + startDateVal
+        +          '" onchange="onStartDateInput(this.value)">'
+        + '      <input type="time" class="range-input time-input" value="' + startTimeStr
+        +          '" onchange="onStartTimeInput(this.value)">'
+        + '    </div>'
+        + '  </div>'
+        + '  <div>'
+        + '    <div class="range-field-label">End</div>'
+        + '    <div class="range-field-row">'
+        + '      <input type="date" class="range-input date-input" value="' + endDateVal
+        +          '" onchange="onEndDateInput(this.value)">'
+        + '      <input type="time" class="range-input time-input" value="' + endTimeStr
+        +          '" onchange="onEndTimeInput(this.value)">'
+        + '    </div>'
+        + '  </div>'
+        + '</div>';
+
+    html += '<button class="fetch-btn apply-btn" onclick="applyRange()">Apply</button>';
+    html += '<div class="tz-note">Local &middot; ' + tzName + '</div>';
+
+    return html;
+    }
+
+    // build the 6(ish)-row day grid for the month currently in view,
+    // padded with muted leading/trailing days from adjacent months
+    function buildCalendarCells() {
+    var firstOfMonth = new Date(calViewYear, calViewMonth, 1);
+    var startWeekday = (firstOfMonth.getDay() + 6) % 7; // Monday-first
+    var daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+    var daysInPrevMonth = new Date(calViewYear, calViewMonth, 0).getDate();
+
+    var cells = [];
+    for (var i = 0; i < startWeekday; i++) {
+        var pm = calViewMonth - 1, py = calViewYear;
+        if (pm < 0) { pm = 11; py -= 1; }
+        cells.push({ y: py, m: pm, d: daysInPrevMonth - startWeekday + 1 + i, muted: true });
+    }
+    for (var d = 1; d <= daysInMonth; d++) {
+        cells.push({ y: calViewYear, m: calViewMonth, d: d, muted: false });
+    }
+    var rem = cells.length % 7;
+    if (rem !== 0) {
+        var need = 7 - rem;
+        for (var j = 0; j < need; j++) {
+        var nm = calViewMonth + 1, ny = calViewYear;
+        if (nm > 11) { nm = 0; ny += 1; }
+        cells.push({ y: ny, m: nm, d: j + 1, muted: true });
+        }
+    }
+
+    var today = new Date();
+    var html = '';
+    cells.forEach(function(c) {
+        var classes = ['cal-day'];
+        if (c.muted) classes.push('muted');
+        if (c.y === today.getFullYear() && c.m === today.getMonth() && c.d === today.getDate()) classes.push('today');
+        if (pendingStart && c.y === pendingStart.y && c.m === pendingStart.m && c.d === pendingStart.d) classes.push('range-start');
+        if (pendingEnd && c.y === pendingEnd.y && c.m === pendingEnd.m && c.d === pendingEnd.d) classes.push('range-end');
+        if (pendingStart && pendingEnd && isBetween(c, pendingStart, pendingEnd)) classes.push('in-range');
+        html += '<div class="' + classes.join(' ') + '" onclick="selectCalendarDay(' + c.y + ',' + c.m + ',' + c.d + ')">'
+        + c.d + '</div>';
+    });
+    return html;
+    }
+
+    // ─── popover interaction handlers ───
+
+    function toggleRangePopover() {
+    rangeOpen = !rangeOpen;
+    if (rangeOpen) {
+        var s = activeRange ? new Date(activeRange.startMs) : new Date(Date.now() - 3600000);
+        var e = activeRange ? new Date(activeRange.endMs) : new Date();
+        pendingStart = { y: s.getFullYear(), m: s.getMonth(), d: s.getDate() };
+        pendingEnd = { y: e.getFullYear(), m: e.getMonth(), d: e.getDate() };
+        startTimeStr = pad2(s.getHours()) + ":" + pad2(s.getMinutes());
+        endTimeStr = pad2(e.getHours()) + ":" + pad2(e.getMinutes());
+        calViewYear = pendingStart.y;
+        calViewMonth = pendingStart.m;
+    }
+    renderControls();
+    }
+
+    function closeRangePopover() {
+    rangeOpen = false;
+    renderControls();
+    }
+
+    function changeMonth(delta) {
+    calViewMonth += delta;
+    if (calViewMonth < 0) { calViewMonth = 11; calViewYear -= 1; }
+    else if (calViewMonth > 11) { calViewMonth = 0; calViewYear += 1; }
+    renderControls();
+    }
+
+    function selectCalendarDay(y, m, d) {
+    var clicked = { y: y, m: m, d: d };
+    if (!pendingStart || (pendingStart && pendingEnd)) {
+        pendingStart = clicked;
+        pendingEnd = null;
+    } else if (dateKey(clicked) < dateKey(pendingStart)) {
+        pendingEnd = pendingStart;
+        pendingStart = clicked;
+    } else {
+        pendingEnd = clicked;
+    }
+    renderControls();
+    }
+
+    function onStartDateInput(v) {
+    var p = v.split('-');
+    if (p.length === 3) pendingStart = { y: +p[0], m: +p[1] - 1, d: +p[2] };
+    }
+    function onEndDateInput(v) {
+    var p = v.split('-');
+    if (p.length === 3) pendingEnd = { y: +p[0], m: +p[1] - 1, d: +p[2] };
+    }
+    function onStartTimeInput(v) { startTimeStr = v; }
+    function onEndTimeInput(v) { endTimeStr = v; }
+
+    function formatRangeLabel(start, end, st, et) {
+    var sameDay = (start.y === end.y && start.m === end.m && start.d === end.d);
+    var sLabel = MONTH_SHORT[start.m] + ' ' + start.d + ', ' + st;
+    var eLabel = sameDay ? et : (MONTH_SHORT[end.m] + ' ' + end.d + ', ' + et);
+    return sLabel + ' – ' + eLabel;
+    }
+
+    function applyRange() {
+    if (!pendingStart) { alert("Pick a start date on the calendar."); return; }
+    var endD = pendingEnd || pendingStart;
+    var st = startTimeStr || "00:00";
+    var et = endTimeStr || "23:59";
+
+    var startMs = new Date(pendingStart.y, pendingStart.m, pendingStart.d, +st.split(':')[0], +st.split(':')[1]).getTime();
+    var endMs = new Date(endD.y, endD.m, endD.d, +et.split(':')[0], +et.split(':')[1]).getTime();
+
+    if (endMs <= startMs) { alert("End time must be after the start time."); return; }
+
+    activeRange = { startMs: startMs, endMs: endMs, label: formatRangeLabel(pendingStart, endD, st, et) };
+    rangeOpen = false;
+    renderControls();
+    fetchHistory(startMs, endMs);
+    }
+
+    // default view when the page loads and whenever the popover is dismissed
+    // without ever applying a custom range: the last hour of readings
+    function applyDefaultRange() {
+    var now = Date.now();
+    var startMs = now - 3600000;
+    activeRange = { startMs: startMs, endMs: now, label: "Last 1 hour" };
+    renderControls();
+    fetchHistory(startMs, now);
+    }
+
+    // close the popover on Escape, same as clicking outside it
+    document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && rangeOpen) closeRangePopover();
+    });
+
+    // ─── FETCHING ───
+
+    function fetchHistory(startMs, endMs) {
+    document.getElementById("status").innerHTML =
+        '<div class="state-message"><div class="emoji">◎</div>Loading readings...</div>';
+
+    fetch(API + "?start=" + startMs + "&end=" + endMs)
+        .then(function(res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+        })
+        .then(function(data) {
+        renderResults(data);
+        })
+        .catch(function(err) {
+        document.getElementById("status").innerHTML =
+            '<div class="state-message"><div class="emoji">⚠</div>Error: ' + err.message + '</div>';
+        });
+    }
+
+    // ─── CSV EXPORT ───
+
+    function exportCSV() {
+    if (!lastData || lastData.length === 0) {
+        alert("Nothing to export — fetch a time range first.");
+        return;
+    }
+    // sensor -> index in raw.adc[] (firmware fill order)
+    var ADC_INDEX = { MQ131:0, MQ135:1, MQ2:2, MQ3:3, MQ4:4, MQ5:5, MQ6:6, MQ7:7, MQ9:8 };
+    function sensorVoltage(record, sensor) {
+        if (!record.raw || !record.raw.adc) return "";
+        var i = ADC_INDEX[sensor];
+        if (i == null || record.raw.adc[i] == null) return "";
+        return (record.raw.adc[i] / 4095 * 3.3).toFixed(3);
+    }
+
+    var rows = [["timestamp", "gas", "sensor", "voltage_v", "value", "unit", "tier", "osha_mixture_em", "anomaly"]];
+
+    lastData.forEach(function(record) {
+        var ts = record.server_time || new Date(record.timestamp_ms).toISOString();
+        var em = record.osha_mixture_em != null ? record.osha_mixture_em : "";
+        var anomaly = (record.ml && record.ml.anomaly_detected) ? "yes" : "no";
+        record.readings.forEach(function(r) {
+        if (r.gas === "CO2_est") return;   // drop MQ135 estimate; real CO2 added below
+        rows.push([ts, r.gas, r.sensor, sensorVoltage(record, r.sensor), r.value, gasUnit(r.gas), r.tier, em, anomaly]);
+        });
+        // add the real NDIR CO2 as its own row (top-level field, not in readings)
+        if (record.co2_ndir != null && record.co2_ndir !== -1) {
+        rows.push([ts, "CO2", "S88", "", record.co2_ndir, "ppm", "", em, anomaly]);
+        }});
+
+    // quote every field so commas/units don't shift columns
+    var csv = rows.map(function(row) {
+        return row.map(function(cell) {
+        var s = String(cell == null ? "" : cell);
+        return '"' + s.replace(/"/g, '""') + '"';
+        }).join(",");
+    }).join("\n");
+
+    var blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "gas_history_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    }
+
+    // ─── SUMMARY ───
+
+    function renderSummary(data) {
+    if (!data || data.length === 0) {
+        document.getElementById("summary").innerHTML = '';
+        return;
+    }
+
+    // count elevated readings across all records
+    var totalReadings = 0;
+    var warnings = 0;
+    var cautions = 0;
+    var alerts = 0;
+    var peakEm = 0;
+    var anomalies = 0;
+
+    data.forEach(function(record) {
+        if (record.osha_mixture_em > peakEm) peakEm = record.osha_mixture_em;
+        if (record.ml && record.ml.anomaly_detected) anomalies++;
+
+        record.readings.forEach(function(r) {
+        totalReadings++;
+        if (r.tier === "warning") warnings++;
+        else if (r.tier === "caution") cautions++;
+        else if (r.tier === "alert") alerts++;
+        });
+    });
+
+    var html = '<div class="stat-pill">'
+        + '<div class="stat-label">Records</div>'
+        + '<div class="stat-value">' + data.length + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">Warnings</div>'
+        + '<div class="stat-value" style="color:' + (warnings > 0 ? TIER_COLORS.warning : TIER_COLORS.normal) + '">'
+        + warnings + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">Cautions</div>'
+        + '<div class="stat-value" style="color:' + (cautions > 0 ? TIER_COLORS.caution : TIER_COLORS.normal) + '">'
+        + cautions + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">Alerts</div>'
+        + '<div class="stat-value" style="color:' + (alerts > 0 ? TIER_COLORS.alert : TIER_COLORS.normal) + '">'
+        + alerts + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">Peak Em</div>'
+        + '<div class="stat-value" style="color:' + emColor(peakEm) + '">'
+        + fmt(peakEm) + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">ML Anomalies</div>'
+        + '<div class="stat-value" style="color:' + (anomalies > 0 ? TIER_COLORS.warning : TIER_COLORS.normal) + '">'
+        + anomalies + '</div></div>';
+
+    document.getElementById("summary").innerHTML = html;
+    }    
+
+    // ─── RENDER RESULTS ───
+    // the per-record timeline used to render here too — it now lives on its
+    // own "Records" page; this page only needs the summary + the three graphs.
+
+    function renderResults(data) {
+    lastData = data;
+    renderSummary(data);
+    document.getElementById("status").innerHTML = '';
+
+    if (!data || data.length === 0) {
+        document.getElementById("status").innerHTML =
+        '<div class="state-message"><div class="emoji">○</div>No readings found for this time range.</div>';
+        document.getElementById("footer").innerHTML = '';
+        return;
+    }
+
+    graphData = processGraphData(data);
+    renderGraphSection();
+
+    voltageData = processVoltageData(data);
+    renderVoltageSection();
+
+    co2Data = processCo2Data(data);
+    renderCo2Section();
+
+    document.getElementById("footer").innerHTML =
+        '<span>ETV Frellmann · Gas Sensor Monitoring System</span>'
+        + '<span>Showing ' + data.length + ' records · Region: us-east-2</span>';
+    }
+
+    // ─── GAS COLORS ───
+    // each gas gets a unique color for the graph
+    var GAS_COLORS = {
+    LPG:       "#ff1212", // red
+    H2:        "#ff6912", // orange
+    CH4:       "#ffbc12", // orange-yellow
+    Alcohol:   "#ffef12", // yellow
+    Benzene:   "#b8ff12", // lime green
+    Hexane:    "#5dff12", // bright green
+    Smoke:     "#12ff9c", // sea green
+    CO:        "#12ffe7", // aqua
+    Flammable: "#02e7f7", // light blue
+    Ozone:     "#022ff7", // blue
+    CO2:       "#ffd400", // gold
+    NH4:       "#da02f7", // purple
+    Toluene:   "#f7029d", // hot pink
+    Acetone:   "#ffbde8", // light pink
+    };
+
+    // ─── GRAPH STATE ───
+    var graphVisible = true;
+    var logScale = false;
+    var activeGases = {};      // which gases are checked
+    var graphData = null;       // processed graph data
+    var hoveredPoint = null;    // currently hovered data point
+
+    // ─── PROCESS DATA FOR GRAPH ───
+    // for each timestamp, take the max value per gas across all sensors
+    function processGraphData(records) {
+    if (!records || records.length === 0) return null;
+
+    // sort oldest first for left-to-right plotting
+    var sorted = records.slice().sort(function(a, b) {
+        return a.timestamp_ms - b.timestamp_ms;
+    });
+
+    var allGases = {};
+    var points = [];
+
+    sorted.forEach(function(record) {
+        var time = record.timestamp_ms;
+        var displayTime = (record.server_time || new Date(time).toISOString())
+        .replace("T", " ").replace("Z", " UTC");
+        var peakPerGas = {};
+
+        record.readings.forEach(function(r) {
+        if (r.gas === "CO2_est") return;   // keep MQ135's rough CO2 estimate out of the trend graph
+        // take max across sensors for same gas
+        if (!peakPerGas[r.gas] || r.value > peakPerGas[r.gas]) {
+            peakPerGas[r.gas] = r.value;
+        }
+        allGases[r.gas] = true;
+        });
+
+        points.push({
+        time: time,
+        displayTime: displayTime,
+        gases: peakPerGas,
+        });
+    });
+
+    // initialize all gas filters to active if first load
+    var gasNames = Object.keys(allGases).sort();
+    if (Object.keys(activeGases).length === 0) {
+        gasNames.forEach(function(g) { activeGases[g] = true; });
+    }
+
+    return { points: points, gases: gasNames };
+    }
+
+    // ─── RENDER GRAPH SECTION ───
+    function renderGraphSection() {
+    if (!graphData) {
+        document.getElementById("graph-section").innerHTML = '';
+        return;
+    }
+
+    var html = '<div class="graph-header">'
+        + '<div class="graph-header-left">'
+        + '<span class="graph-title">Gas Trends</span>'
+        + '<button class="scale-toggle' + (logScale ? ' active' : '') + '" onclick="toggleLogScale()">Log Scale</button>'
+        + '</div>'
+        + '<button class="graph-toggle-btn" onclick="toggleGraph()">'
+        + (graphVisible ? 'Hide Graph' : 'Show Graph') + '</button>'
+        + '</div>';
+
+    if (graphVisible) {
+        // gas filter checkboxes
+        html += '<div class="graph-body">';
+        html += '<div class="gas-filters">';
+        graphData.gases.forEach(function(gas) {
+        var color = GAS_COLORS[gas] || "#58a6ff";
+        var isActive = activeGases[gas];
+        html += '<div class="gas-filter' + (isActive ? ' active' : '') + '"'
+            + ' style="--gas-color:' + color + '"'
+            + ' onclick="toggleGas(\'' + gas + '\')">'
+            + '<div class="gas-swatch" style="background:' + color
+            + ';opacity:' + (isActive ? '1' : '0.3') + '"></div>'
+            + gas + '</div>';
+        });
+        html += '</div>';
+
+        // canvas
+        html += '<div class="chart-container">'
+        + '<canvas id="graph-canvas"></canvas>'
+        + '<div class="chart-tooltip" id="chart-tooltip"></div>'
+        + '</div>';
+        html += '</div>';
+    }
+
+    document.getElementById("graph-section").innerHTML = html;
+
+    if (graphVisible) {
+        drawGraph();
+        }
+    }
+
+    // ─── TOGGLE HANDLERS ───
+    function toggleGraph() {
+    graphVisible = !graphVisible;
+    renderGraphSection();
+    }
+
+    function toggleLogScale() {
+    logScale = !logScale;
+    renderGraphSection();
+    }
+
+    function toggleGas(gas) {
+    activeGases[gas] = !activeGases[gas];
+    renderGraphSection();
+    }
+
+    // ─── DRAW GRAPH ───
+    function drawGraph() {
+    var canvas = document.getElementById("graph-canvas");
+    if (!canvas || !graphData || graphData.points.length === 0) return;
+
+    var container = canvas.parentElement;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = container.offsetWidth * dpr;
+    canvas.height = container.offsetHeight * dpr;
+    canvas.style.width = container.offsetWidth + "px";
+    canvas.style.height = container.offsetHeight + "px";
+
+    var ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+
+    var W = container.offsetWidth;
+    var H = container.offsetHeight;
+
+    // chart area with padding for labels
+    var pad = { top: 20, right: 20, bottom: 40, left: 65 };
+    var cw = W - pad.left - pad.right;
+    var ch = H - pad.top - pad.bottom;
+
+    // figure out which gases are active
+    var visibleGases = graphData.gases.filter(function(g) { return activeGases[g]; });
+    if (visibleGases.length === 0) {
+        ctx.fillStyle = "#4a5c72";
+        ctx.font = "13px Pliant";
+        ctx.textAlign = "center";
+        ctx.fillText("Select at least one gas to display", W / 2, H / 2);
+        return;
+    }
+
+    // find global min/max across visible gases
+    var allValues = [];
+    graphData.points.forEach(function(pt) {
+        visibleGases.forEach(function(g) {
+        if (pt.gases[g] != null) allValues.push(pt.gases[g]);
+        });
+    });
+
+    if (allValues.length === 0) return;
+
+    var rawMin = Math.min.apply(null, allValues);
+    var rawMax = Math.max.apply(null, allValues);
+
+    // add 10% padding to y range
+    var yMin, yMax;
+    if (logScale) {
+        yMin = Math.max(rawMin, 0.001);  // can't log(0)
+        yMax = rawMax * 1.5;
+    } else {
+        var padding = (rawMax - rawMin) * 0.1 || 1;
+        yMin = Math.max(rawMin - padding, 0);
+        yMax = rawMax + padding;
+    }
+
+    // time range
+    var tMin = graphData.points[0].time;
+    var tMax = graphData.points[graphData.points.length - 1].time;
+    var tRange = tMax - tMin || 1;
+
+    // helper to convert value to Y pixel
+    function valToY(v) {
+        if (logScale) {
+        var logMin = Math.log10(Math.max(yMin, 0.001));
+        var logMax = Math.log10(yMax);
+        var logV = Math.log10(Math.max(v, 0.001));
+        return pad.top + ch - ((logV - logMin) / (logMax - logMin)) * ch;
+        }
+        return pad.top + ch - ((v - yMin) / (yMax - yMin)) * ch;
+    }
+
+    // helper to convert timestamp to X pixel
+    function timeToX(t) {
+        return pad.left + ((t - tMin) / tRange) * cw;
+    }
+
+    // ─── draw grid lines ───
+    ctx.strokeStyle = "#1e2736";
+    ctx.lineWidth = 1;
+
+    // Y axis grid (5 lines)
+    var ySteps = 5;
+    for (var i = 0; i <= ySteps; i++) {
+        var yVal;
+        if (logScale) {
+        var logMin = Math.log10(Math.max(yMin, 0.001));
+        var logMax = Math.log10(yMax);
+        yVal = Math.pow(10, logMin + (logMax - logMin) * (i / ySteps));
+        } else {
+        yVal = yMin + (yMax - yMin) * (i / ySteps);
+        }
+        var yPx = valToY(yVal);
+
+        ctx.beginPath();
+        ctx.moveTo(pad.left, yPx);
+        ctx.lineTo(W - pad.right, yPx);
+        ctx.stroke();
+
+        // Y label
+        ctx.fillStyle = "#4a5c72";
+        ctx.font = "10px Pliant";
+        ctx.textAlign = "right";
+        ctx.fillText(fmt(yVal), pad.left - 8, yPx + 3);
+    }
+
+    // X axis time labels
+    var xLabelCount = Math.min(graphData.points.length, 6);
+    var xStep = Math.max(Math.floor(graphData.points.length / xLabelCount), 1);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#4a5c72";
+    ctx.font = "10px Pliant";
+
+    for (var i = 0; i < graphData.points.length; i += xStep) {
+        var pt = graphData.points[i];
+        var x = timeToX(pt.time);
+        // short time label
+        var d = new Date(pt.time);
+        var timeLabel = (d.getMonth() + 1) + "/" + d.getDate() + " "
+        + String(d.getHours()).padStart(2, "0") + ":"
+        + String(d.getMinutes()).padStart(2, "0");
+
+        ctx.fillText(timeLabel, x, H - pad.bottom + 20);
+    }
+
+    // ─── draw lines for each visible gas ───
+    visibleGases.forEach(function(gas) {
+        var color = GAS_COLORS[gas] || "#58a6ff";
+        var pts = [];
+
+        graphData.points.forEach(function(p) {
+        if (p.gases[gas] != null) {
+            pts.push({ x: timeToX(p.time), y: valToY(p.gases[gas]), value: p.gases[gas], time: p.time, displayTime: p.displayTime });
+        }
+        });
+
+        if (pts.length === 0) return;
+
+        // draw line
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        pts.forEach(function(p, i) {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+
+        // draw dots
+        pts.forEach(function(p) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        });
+    });
+
+    // ─── store hit targets for hover/click ───
+    var hitTargets = [];
+    graphData.points.forEach(function(p) {
+        var x = timeToX(p.time);
+        visibleGases.forEach(function(gas) {
+        if (p.gases[gas] != null) {
+            hitTargets.push({
+            x: x,
+            y: valToY(p.gases[gas]),
+            gas: gas,
+            value: p.gases[gas],
+            time: p.time,
+            displayTime: p.displayTime,
+            allGases: p.gases,
+            });
+        }
+        });
+    });
+
+    canvas._hitTargets = hitTargets;
+    canvas._pad = pad;
+    canvas._timeToX = timeToX;
+    canvas._graphPoints = graphData.points;
+    canvas._visibleGases = visibleGases;
+    }
+
+    // ─── RAW SENSOR VOLTAGE GRAPH ───────────────────────────────
+    // Independent of ppm AND of the ML model. Plots adc/4095*3.3 per
+    // physical sensor, straight from raw.adc[] — no confidence multiplier,
+    // no autoencoder, no datasheet curve. Just the pin voltage the GIGA saw.
+
+    // one color per physical sensor (NOT per gas — gases share sensors)
+    var SENSOR_COLORS = {
+    MQ131: "#ff4d4d",
+    MQ135: "#ff9f40",
+    MQ2:   "#ffd24d",
+    MQ3:   "#7ed957",
+    MQ4:   "#3dd1a0",
+    MQ5:   "#36c5f0",
+    MQ6:   "#5b8def",
+    MQ7:   "#b072ff",
+    MQ9:   "#ff6fcf",
+    };
+    // sensor -> index in raw.adc[] (firmware fill order)
+    var VOLT_INDEX = { MQ131:0, MQ135:1, MQ2:2, MQ3:3, MQ4:4, MQ5:5, MQ6:6, MQ7:7, MQ9:8 };
+    var ADC_REF = 3.3, ADC_MAX = 4095, CLIP_V = 3.3;
+
+    var voltageGraphVisible = true;
+    var activeSensors = {};
+    var voltageData = null;
+
+    // build per-timestamp voltage points straight from raw.adc[]
+    function processVoltageData(records) {
+    if (!records || records.length === 0) return null;
+
+    var sorted = records.slice().sort(function(a, b) {
+        return a.timestamp_ms - b.timestamp_ms;
+    });
+
+    var seenSensors = {};
+    var points = [];
+
+    sorted.forEach(function(record) {
+        if (!record.raw || !record.raw.adc) return;
+        var time = record.timestamp_ms;
+        var displayTime = (record.server_time || new Date(time).toISOString())
+        .replace("T", " ").replace("Z", " UTC");
+        var volts = {};
+        Object.keys(VOLT_INDEX).forEach(function(sensor) {
+        var i = VOLT_INDEX[sensor];
+        var adc = record.raw.adc[i];
+        if (adc == null) return;
+        volts[sensor] = adc / ADC_MAX * ADC_REF;
+        seenSensors[sensor] = true;
+        });
+        points.push({ time: time, displayTime: displayTime, sensors: volts });
+    });
+
+    if (points.length === 0) return null;
+
+    var sensorNames = Object.keys(VOLT_INDEX).filter(function(s) { return seenSensors[s]; });
+    if (Object.keys(activeSensors).length === 0) {
+        sensorNames.forEach(function(s) { activeSensors[s] = true; });
+    }
+
+    return { points: points, sensors: sensorNames };
+    }
+
+    function toggleVoltageGraph() {
+    voltageGraphVisible = !voltageGraphVisible;
+    renderVoltageSection();
+    }
+    function toggleSensor(sensor) {
+    activeSensors[sensor] = !activeSensors[sensor];
+    renderVoltageSection();
+    }
+
+    // render the voltage section (reuses the gas-graph CSS classes)
+    function renderVoltageSection() {
+    var mount = document.getElementById("voltage-graph-section");
+    if (!mount) return;
+    if (!voltageData) { mount.innerHTML = ''; return; }
+
+    var html = '<div class="graph-header">'
+        + '<div class="graph-header-left">'
+        + '<span class="graph-title">Raw Sensor Voltage</span>'
+        + '<span class="scale-toggle" style="cursor:default">adc / 4095 \u00d7 3.3 \u00b7 no ML</span>'
+        + '</div>'
+        + '<button class="graph-toggle-btn" onclick="toggleVoltageGraph()">'
+        + (voltageGraphVisible ? 'Hide Graph' : 'Show Graph') + '</button>'
+        + '</div>';
+
+    if (voltageGraphVisible) {
+        html += '<div class="graph-body">';
+        html += '<div class="gas-filters">';
+        voltageData.sensors.forEach(function(sensor) {
+        var color = SENSOR_COLORS[sensor] || "#58a6ff";
+        var isActive = activeSensors[sensor];
+        html += '<div class="gas-filter' + (isActive ? ' active' : '') + '"'
+            + ' style="--gas-color:' + color + '"'
+            + ' onclick="toggleSensor(\'' + sensor + '\')">'
+            + '<div class="gas-swatch" style="background:' + color
+            + ';opacity:' + (isActive ? '1' : '0.3') + '"></div>'
+            + sensor + '</div>';
+        });
+        html += '</div>';
+        html += '<div class="chart-container"><canvas id="voltage-canvas"></canvas></div>';
+        html += '</div>';
+    }
+
+    mount.innerHTML = html;
+    if (voltageGraphVisible) drawVoltageGraph();
+    }
+
+    // draw the voltage graph (linear 0-3.3V, with a clip reference line)
+    function drawVoltageGraph() {
+    var canvas = document.getElementById("voltage-canvas");
+    if (!canvas || !voltageData || voltageData.points.length === 0) return;
+
+    var container = canvas.parentElement;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = container.offsetWidth * dpr;
+    canvas.height = container.offsetHeight * dpr;
+    canvas.style.width = container.offsetWidth + "px";
+    canvas.style.height = container.offsetHeight + "px";
+
+    var ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+
+    var W = container.offsetWidth, H = container.offsetHeight;
+    var pad = { top: 20, right: 20, bottom: 40, left: 65 };
+    var cw = W - pad.left - pad.right;
+    var ch = H - pad.top - pad.bottom;
+
+    var visible = voltageData.sensors.filter(function(s) { return activeSensors[s]; });
+    if (visible.length === 0) {
+        ctx.fillStyle = "#4a5c72";
+        ctx.font = "13px Pliant";
+        ctx.textAlign = "center";
+        ctx.fillText("Select at least one sensor to display", W / 2, H / 2);
+        return;
+    }
+
+    // fixed 0-3.3V window: ADC caps at 4095, so 3.3V is the hard ceiling
+    var yMin = 0, yMax = 3.4;
+
+    var tMin = voltageData.points[0].time;
+    var tMax = voltageData.points[voltageData.points.length - 1].time;
+    var tRange = tMax - tMin || 1;
+
+    function valToY(v) { return pad.top + ch - ((v - yMin) / (yMax - yMin)) * ch; }
+    function timeToX(t) { return pad.left + ((t - tMin) / tRange) * cw; }
+
+    // grid + Y labels (volts)
+    ctx.strokeStyle = "#1e2736";
+    ctx.lineWidth = 1;
+    var ySteps = 5;
+    for (var i = 0; i <= ySteps; i++) {
+        var yVal = yMin + (yMax - yMin) * (i / ySteps);
+        var yPx = valToY(yVal);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, yPx);
+        ctx.lineTo(W - pad.right, yPx);
+        ctx.stroke();
+        ctx.fillStyle = "#4a5c72";
+        ctx.font = "10px Pliant";
+        ctx.textAlign = "right";
+        ctx.fillText(yVal.toFixed(2) + "V", pad.left - 8, yPx + 3);
+    }
+
+    // X time labels
+    var xLabelCount = Math.min(voltageData.points.length, 6);
+    var xStep = Math.max(Math.floor(voltageData.points.length / xLabelCount), 1);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#4a5c72";
+    ctx.font = "10px Pliant";
+    for (var i = 0; i < voltageData.points.length; i += xStep) {
+        var pt = voltageData.points[i];
+        var x = timeToX(pt.time);
+        var d = new Date(pt.time);
+        var timeLabel = (d.getMonth() + 1) + "/" + d.getDate() + " "
+        + String(d.getHours()).padStart(2, "0") + ":"
+        + String(d.getMinutes()).padStart(2, "0");
+        ctx.fillText(timeLabel, x, H - pad.bottom + 20);
+    }
+
+    // 3.3V clip reference line (dashed red)
+    var clipY = valToY(CLIP_V);
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = "#ff1212";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, clipY);
+    ctx.lineTo(W - pad.right, clipY);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = "#ff1212";
+    ctx.font = "10px Pliant";
+    ctx.textAlign = "left";
+    ctx.fillText("3.3V clip", pad.left + 4, clipY - 4);
+
+    // one line per visible sensor
+    visible.forEach(function(sensor) {
+        var color = SENSOR_COLORS[sensor] || "#58a6ff";
+        var pts = [];
+        voltageData.points.forEach(function(p) {
+        if (p.sensors[sensor] != null) {
+            pts.push({ x: timeToX(p.time), y: valToY(p.sensors[sensor]) });
+        }
+        });
+        if (pts.length === 0) return;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        pts.forEach(function(p, i) {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+        pts.forEach(function(p) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        });
+    });
+    }
+
+    // ─── CO2 (NDIR) GRAPH ───────────────────────────────────────
+    // Standalone chart for the Senseair S88's real CO2 ppm. Lives on
+    // its own axis because its scale (~400-2000 ppm) has nothing to do
+    // with the MQ gas ppm values and would flatten them on a shared axis.
+    var CO2_COLOR = "#ffd400";   // gold, matches the dashboard CO2 card
+    var CO2_FLOOR = 300;         // don't let the y-axis bottom rise above this,
+                                 // so flat ambient readings aren't blown up into noise
+    var co2GraphVisible = true;
+    var co2Data = null;
+
+    // build one point per record; -1 / missing -> null marker so the line breaks
+    function processCo2Data(records) {
+    if (!records || records.length === 0) return null;
+
+    var sorted = records.slice().sort(function(a, b) {
+        return a.timestamp_ms - b.timestamp_ms;
+    });
+
+    var points = [];
+    var anyValid = false;
+    sorted.forEach(function(record) {
+        var time = record.timestamp_ms;
+        var displayTime = (record.server_time || new Date(time).toISOString())
+        .replace("T", " ").replace("Z", " UTC");
+        var v = record.co2_ndir;
+        // DELTA 3: sentinel/missing becomes null (a gap), not a value
+        var valid = (v != null && v !== -1);
+        if (valid) anyValid = true;
+        points.push({ time: time, displayTime: displayTime, value: valid ? v : null });
+    });
+
+    if (!anyValid) return null;   // nothing plottable in this range
+    return { points: points };
+    }
+
+    function toggleCo2Graph() {
+    co2GraphVisible = !co2GraphVisible;
+    renderCo2Section();
+    }
+
+    // render the CO2 section (reuses the graph CSS classes; DELTA 1: no filter chips)
+    function renderCo2Section() {
+    var mount = document.getElementById("co2-graph-section");
+    if (!mount) return;
+    if (!co2Data) { mount.innerHTML = ''; return; }
+
+    var html = '<div class="graph-header">'
+        + '<div class="graph-header-left">'
+        + '<span class="graph-title">CO\u2082 (NDIR)</span>'
+        + '<span class="scale-toggle" style="cursor:default">Senseair S88 \u00b7 ppm</span>'
+        + '</div>'
+        + '<button class="graph-toggle-btn" onclick="toggleCo2Graph()">'
+        + (co2GraphVisible ? 'Hide Graph' : 'Show Graph') + '</button>'
+        + '</div>';
+
+    if (co2GraphVisible) {
+        html += '<div class="graph-body">';
+        html += '<div class="chart-container"><canvas id="co2-canvas"></canvas></div>';
+        html += '</div>';
+    }
+
+    mount.innerHTML = html;
+    if (co2GraphVisible) drawCo2Graph();
+    }
+
+    // draw the CO2 graph (DELTA 2: auto-scaled ppm axis w/ floor, no clip line)
+    function drawCo2Graph() {
+    var canvas = document.getElementById("co2-canvas");
+    if (!canvas || !co2Data || co2Data.points.length === 0) return;
+
+    var container = canvas.parentElement;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = container.offsetWidth * dpr;
+    canvas.height = container.offsetHeight * dpr;
+    canvas.style.width = container.offsetWidth + "px";
+    canvas.style.height = container.offsetHeight + "px";
+
+    var ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+
+    var W = container.offsetWidth, H = container.offsetHeight;
+    var pad = { top: 20, right: 20, bottom: 40, left: 65 };
+    var cw = W - pad.left - pad.right;
+    var ch = H - pad.top - pad.bottom;
+
+    // valid values only, for axis scaling
+    var values = co2Data.points
+        .filter(function(p) { return p.value != null; })
+        .map(function(p) { return p.value; });
+    if (values.length === 0) {
+        ctx.fillStyle = "#4a5c72";
+        ctx.font = "13px Pliant";
+        ctx.textAlign = "center";
+        ctx.fillText("No CO2 readings in this range", W / 2, H / 2);
+        return;
+    }
+
+    var dataMin = Math.min.apply(null, values);
+    var dataMax = Math.max.apply(null, values);
+    // anchor bottom at CO2_FLOOR unless the data actually dips lower
+    var yMin = Math.min(CO2_FLOOR, dataMin);
+    var yMax = dataMax;
+    var span = (yMax - yMin) || 100;
+    yMin = Math.max(0, yMin - span * 0.05);   // small breathing room
+    yMax = yMax + span * 0.10;
+
+    var tMin = co2Data.points[0].time;
+    var tMax = co2Data.points[co2Data.points.length - 1].time;
+    var tRange = tMax - tMin || 1;
+
+    function valToY(v) { return pad.top + ch - ((v - yMin) / (yMax - yMin)) * ch; }
+    function timeToX(t) { return pad.left + ((t - tMin) / tRange) * cw; }
+
+    // grid + Y labels (ppm)
+    ctx.strokeStyle = "#1e2736";
+    ctx.lineWidth = 1;
+    var ySteps = 5;
+    for (var i = 0; i <= ySteps; i++) {
+        var yVal = yMin + (yMax - yMin) * (i / ySteps);
+        var yPx = valToY(yVal);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, yPx);
+        ctx.lineTo(W - pad.right, yPx);
+        ctx.stroke();
+        ctx.fillStyle = "#4a5c72";
+        ctx.font = "10px Pliant";
+        ctx.textAlign = "right";
+        ctx.fillText(Math.round(yVal) + " ppm", pad.left - 8, yPx + 3);
+    }
+
+    // X time labels
+    var xLabelCount = Math.min(co2Data.points.length, 6);
+    var xStep = Math.max(Math.floor(co2Data.points.length / xLabelCount), 1);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#4a5c72";
+    ctx.font = "10px Pliant";
+    for (var i = 0; i < co2Data.points.length; i += xStep) {
+        var pt = co2Data.points[i];
+        var x = timeToX(pt.time);
+        var d = new Date(pt.time);
+        var timeLabel = (d.getMonth() + 1) + "/" + d.getDate() + " "
+        + String(d.getHours()).padStart(2, "0") + ":"
+        + String(d.getMinutes()).padStart(2, "0");
+        ctx.fillText(timeLabel, x, H - pad.bottom + 20);
+    }
+
+    // single CO2 line — DELTA 3: lift the pen at null gaps
+    ctx.strokeStyle = CO2_COLOR;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    var penDown = false;
+    co2Data.points.forEach(function(p) {
+        if (p.value == null) { penDown = false; return; }   // gap -> break line
+        var x = timeToX(p.time), y = valToY(p.value);
+        if (!penDown) { ctx.moveTo(x, y); penDown = true; }
+        else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // dots on valid points only
+    co2Data.points.forEach(function(p) {
+        if (p.value == null) return;
+        ctx.fillStyle = CO2_COLOR;
+        ctx.beginPath();
+        ctx.arc(timeToX(p.time), valToY(p.value), 3, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    }
+
+    // ─── TOOLTIP HANDLERS ───
+
+    function setupCanvasListeners() {
+    document.getElementById("graph-section").addEventListener("mousemove", function(e) {
+        var canvas = document.getElementById("graph-canvas");
+        var tooltip = document.getElementById("chart-tooltip");
+        if (!canvas || !tooltip || !canvas._hitTargets) return;
+
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var my = e.clientY - rect.top;
+
+        // find nearest point within 20px
+        var closest = null;
+        var closestTime = null;
+        var minDist = 20;
+
+        canvas._hitTargets.forEach(function(ht) {
+        var dx = mx - ht.x;
+        var dy = my - ht.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minDist) {
+            minDist = dist;
+            closest = ht;
+        }
+        });
+
+        if (!closest) {
+        tooltip.classList.remove("visible");
+        canvas.style.cursor = "default";
+        return;
+        }
+
+        canvas.style.cursor = "pointer";
+
+        // build tooltip showing ALL visible gases at this timestamp
+        var html = '<div class="tooltip-time">' + closest.displayTime + '</div>';
+
+        canvas._visibleGases.forEach(function(gas) {
+        var val = closest.allGases[gas];
+        if (val == null) return;
+        var color = GAS_COLORS[gas] || "#58a6ff";
+        var isCurrent = (gas === closest.gas);
+
+        html += '<div class="tooltip-row">'
+            + '<span class="tooltip-gas">'
+            + '<span class="tooltip-swatch" style="background:' + color + '"></span>'
+            + gas + '</span>'
+            + '<span class="tooltip-value" style="color:' + (isCurrent ? color : '#7f90a5')
+            + ';font-weight:' + (isCurrent ? '700' : '500') + '">'
+            + fmt(val) + ' ' + gasUnit(gas) + '</span>'
+            + '</div>';
+        });
+
+        tooltip.innerHTML = html;
+        tooltip.classList.add("visible");
+
+        // position tooltip — flip if near right edge
+        var tipX = closest.x + 16;
+        var tipY = closest.y - 10;
+        if (tipX + 180 > canvas.offsetWidth) tipX = closest.x - 180;
+        if (tipY < 0) tipY = 10;
+
+        tooltip.style.left = tipX + "px";
+        tooltip.style.top = tipY + "px";
+    });
+
+    // hide tooltip when mouse leaves
+    document.getElementById("graph-section").addEventListener("mouseleave", function() {
+        var tooltip = document.getElementById("chart-tooltip");
+        if (tooltip) tooltip.classList.remove("visible");
+    });
+    }
+
+    setupCanvasListeners();
+
+    // ─── START ───
+
+    renderControls();
+    applyDefaultRange();
+
+  </script>
+
+  <script src="wave-bg.js"></script>
+
+</body>
+</html>

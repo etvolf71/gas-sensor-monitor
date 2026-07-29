@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/gas_sensor_dashboard.html" }
+  ]
+}

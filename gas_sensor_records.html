@@ -1,0 +1,1026 @@
+<!-- etv html for gas sensor full records log -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCP Gas Sensor Records</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pliant:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ambient animated background, ported from a 21st.dev canvas component — see wave-bg.js -->
+  <canvas id="wave-bg"></canvas>
+
+  <div id="app">
+    <div class="nav-bar">
+      <img class="brand-logo" src="frellmann-logo.png" alt="Frellmann Water Technologies">
+      <div class="nav-links">
+        <a class="nav-btn" href="gas_sensor_dashboard.html">Dashboard</a>
+        <a class="nav-btn" href="gas_sensor_history.html">History</a>
+        <span class="nav-current-label">Records</span>
+      </div>
+    </div>
+    <div id="header">
+      <div class="header-title">PCP Gas Sensor Records</div>
+      <div class="header-device">GIGA_R1_Sensor_Array_01</div>
+    </div>
+    <div id="controls"></div>
+    <div id="summary"></div>
+    <div id="readings-list"></div>
+    <div id="footer"></div>
+  </div>
+
+  <style>
+    /* ─── reset & base ─── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+    background: #0b1017;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    min-height: 100vh;
+    }
+
+    #app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    position: relative;
+    z-index: 1;
+    }
+
+    /* ─── ambient wave background (wave-bg.js) ─── */
+    #wave-bg {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    pointer-events: none;
+    }
+
+    /* ─── nav bar ─── */
+    .nav-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 16px;
+    }
+
+    /* logo's own background was removed at the pixel level (see frellmann-logo.png) —
+       nothing but the white wordmark renders, so it sits directly on the wave */
+    .brand-logo {
+    height: 60px;
+    width: auto;
+    display: block;
+    }
+
+    .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    }
+
+    .nav-btn,
+    .csv-export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s ease;
+    }
+
+    .nav-btn:hover,
+    .csv-export-btn:hover {
+    color: #1ce5d4;
+    }
+
+    .nav-current-label {
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a5c72;
+    }
+
+    /* ─── header ─── */
+    .header-title {
+    font-family: 'Pliant', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 4px;
+    }
+
+    .header-device {
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    color: #4a5c72;
+    margin-bottom: 20px;
+    }
+
+    /* ─── time range control ─── */
+    #controls {
+    position: relative;
+    margin-bottom: 20px;
+    }
+
+    .controls-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    }
+
+    .controls-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    }
+
+    .range-trigger-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.15s ease;
+    }
+
+    .range-trigger-btn:hover,
+    .range-trigger-btn.open {
+    color: #1ce5d4;
+    }
+
+    .range-trigger-icon {
+    font-size: 13px;
+    color: #1ce5d4;
+    }
+
+    .range-summary {
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    color: #7f90a5;
+    }
+
+    .fetch-btn {
+    background: #58a6ff20;
+    border: 1px solid #58a6ff;
+    border-radius: 6px;
+    color: #58a6ff;
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 16px;
+    cursor: pointer;
+    }
+
+    .fetch-btn:hover {
+    background: #58a6ff30;
+    }
+
+    /* invisible full-page click-catcher — closes the popover on outside click */
+    .range-popover-catcher {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    display: none;
+    }
+    .range-popover-catcher.open { display: block; }
+
+    /* ─── time range popover — frosted glass over the wave-bg canvas ─── */
+    .range-popover {
+    display: none;
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    z-index: 30;
+    width: 300px;
+    background: rgba(7, 22, 36, 0.3);
+    backdrop-filter: blur(28px) saturate(140%);
+    -webkit-backdrop-filter: blur(28px) saturate(140%);
+    border: 1px solid rgba(36, 48, 68, 0.7);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    }
+    .range-popover.open { display: block; }
+
+    .cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    }
+
+    .cal-title {
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: #d4dce8;
+    }
+
+    .cal-nav-btn {
+    background: #161d27;
+    border: 1px solid #243044;
+    border-radius: 6px;
+    color: #7f90a5;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    }
+    .cal-nav-btn:hover { border-color: #1ce5d4; color: #d4dce8; }
+
+    .cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 4px;
+    }
+    .cal-weekdays span {
+    text-align: center;
+    font-size: 10px;
+    color: #4a5c72;
+    font-weight: 600;
+    padding: 4px 0;
+    }
+
+    .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 16px;
+    }
+
+    .cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #d4dce8;
+    border-radius: 6px;
+    cursor: pointer;
+    }
+    .cal-day:hover { background: #1e2736; }
+    .cal-day.muted { color: #35404f; }
+    .cal-day.today { box-shadow: inset 0 0 0 1px #1ce5d4; }
+    .cal-day.in-range { background: rgba(28,229,212,0.14); border-radius: 0; }
+    .cal-day.range-start { background: #1ce5d4; color: #061218; font-weight: 700; border-radius: 6px 0 0 6px; }
+    .cal-day.range-end { background: #1ce5d4; color: #061218; font-weight: 700; border-radius: 0 6px 6px 0; }
+    .cal-day.range-start.range-end { border-radius: 6px; }
+
+    .range-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+    }
+
+    .range-field-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #4a5c72;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 5px;
+    }
+
+    .range-field-row {
+    display: flex;
+    gap: 8px;
+    }
+
+    .range-input {
+    background: #161d27;
+    border: 1px solid #243044;
+    border-radius: 6px;
+    color: #d4dce8;
+    font-family: 'Pliant', sans-serif;
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+    width: 100%;
+    color-scheme: dark;
+    }
+    .range-input:focus { border-color: #1ce5d4; }
+    .range-input.date-input { flex: 1.4; }
+    .range-input.time-input { flex: 1; }
+
+    .apply-btn {
+    width: 100%;
+    display: block;
+    text-align: center;
+    }
+
+    .tz-note {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 10px;
+    color: #4a5c72;
+    }
+
+    /* ─── summary stats ─── */
+    #summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    }
+
+    .stat-pill {
+    background: transparent;
+    border: none;
+    padding: 10px 16px;
+    min-width: 120px;
+    flex: 1 1 120px;
+    }
+
+    .stat-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: #4a5c72;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+    }
+
+    .stat-value {
+    font-family: 'Pliant', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    }
+
+    /* ─── readings timeline ─── */
+    .reading-entry {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(36, 48, 68, 0.6);
+    border-radius: 0;
+    padding: 16px 4px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+    }
+
+    .reading-entry:hover {
+    border-color: rgba(28, 229, 212, 0.5);
+    }
+
+    .reading-entry.expanded .entry-details {
+    display: block;
+    }
+
+    .reading-entry.expanded .entry-expand-icon {
+    transform: rotate(90deg);
+    }
+
+    .entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    }
+
+    .entry-time {
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    }
+
+    .entry-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-family: 'Pliant', sans-serif;
+    font-size: 11px;
+    }
+
+    .entry-em {
+    color: #7f90a5;
+    }
+
+    .entry-expand-icon {
+    color: #4a5c72;
+    font-size: 11px;
+    transition: transform 0.2s ease;
+    }
+
+    .entry-tier-dots {
+    display: flex;
+    gap: 4px;
+    }
+
+    .tier-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    }
+
+    .entry-details {
+    display: none;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(36, 48, 68, 0.6);
+    }
+
+    /* ─── detail grid inside expanded entry ─── */
+    .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    }
+
+    .detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    }
+
+    .detail-gas {
+    font-size: 12px;
+    color: #7f90a5;
+    }
+
+    .detail-gas-sensor {
+    font-size: 10px;
+    color: #4a5c72;
+    }
+
+    .detail-value {
+    font-family: 'Pliant', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    }
+
+    .detail-unit {
+    font-size: 10px;
+    color: #4a5c72;
+    margin-left: 4px;
+    }
+
+    .detail-tier {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    }
+
+    /* ─── loading & empty states ─── */
+    .state-message {
+    text-align: center;
+    padding: 40px;
+    color: #4a5c72;
+    font-size: 14px;
+    }
+
+    .state-message .emoji {
+    font-size: 32px;
+    margin-bottom: 12px;
+    }
+
+    /* ─── footer ─── */
+    #footer {
+    margin-top: 24px;
+    padding: 12px 0;
+    border-top: 1px solid #243044;
+    font-family: 'Pliant', sans-serif;
+    font-size: 10px;
+    color: #4a5c72;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    }
+
+  </style>
+
+  <script>
+
+    // ─── CONFIG ───
+    const API = "https://ulyjh5b6h2.execute-api.us-east-2.amazonaws.com/readings";
+
+    const TIER_COLORS = {
+    normal: "#34d058", alert: "#f0b429", caution: "#e8772e",
+    warning: "#ea4a5a", unknown: "#6a7f96",
+    };
+
+    const TIER_BG = {
+    normal: "rgba(52,208,88,.08)", alert: "rgba(240,180,41,.08)",
+    caution: "rgba(232,119,46,.08)", warning: "rgba(234,74,90,.08)",
+    unknown: "rgba(106,127,150,.06)",
+    };
+
+    const UNITS = { Smoke: "mg/m³"};
+
+    function fmt(v) {
+    if (v == null) return "—";
+    if (Math.abs(v) >= 10000) return v.toFixed(0);
+    if (Math.abs(v) >= 100) return v.toFixed(1);
+    if (Math.abs(v) >= 1) return v.toFixed(2);
+    return v.toFixed(3);
+    }
+
+    function gasUnit(g) {
+    return UNITS[g] || "ppm";
+    }
+
+    function emColor(em) {
+    if (em < 0.5) return TIER_COLORS.normal;
+    if (em < 1.0) return TIER_COLORS.alert;
+    return TIER_COLORS.warning;
+    }
+
+    // ─── TIME RANGE POPOVER ───
+    // "Time Range" button -> popover with a month calendar + start/end date+time
+    // fields -> Apply fetches and closes. No selection yet = defaults to last 1h.
+    var lastData = null;    // most recent fetched records, for CSV export
+
+    var rangeOpen = false;          // is the popover showing
+    var calViewYear, calViewMonth;  // month currently displayed in the calendar
+    var pendingStart = null;        // { y, m, d } — first day clicked/typed, not yet applied
+    var pendingEnd = null;          // { y, m, d } — second day clicked/typed
+    var startTimeStr = "00:00";
+    var endTimeStr = "23:59";
+    var activeRange = null;         // { startMs, endMs, label } — the range currently plotted
+
+    var tzName = (window.Intl && Intl.DateTimeFormat().resolvedOptions().timeZone) || "Local";
+    var MONTH_NAMES = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"];
+    var MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    function pad2(n) { return (n < 10 ? "0" : "") + n; }
+    function dateKey(c) { return c.y * 372 + c.m * 31 + c.d; }
+    function fmtDateInput(c) { return c.y + "-" + pad2(c.m + 1) + "-" + pad2(c.d); }
+
+    function isBetween(c, start, end) {
+    var k = dateKey(c);
+    return k > dateKey(start) && k < dateKey(end);
+    }
+
+    // ─── controls bar + popover render ───
+
+    function renderControls() {
+    var summaryText = activeRange ? activeRange.label : "Last 1 hour";
+
+    var html = '<div class="controls-bar">'
+        + '  <div class="controls-bar-left">'
+        + '    <button class="range-trigger-btn' + (rangeOpen ? ' open' : '') + '" onclick="toggleRangePopover()">'
+        + '      <span class="range-trigger-icon">&#9783;</span> Time Range'
+        + '    </button>'
+        + '    <span class="range-summary">' + summaryText + '</span>'
+        + '    <button class="csv-export-btn" onclick="exportCSV()">Export CSV</button>'
+        + '  </div>'
+        + '</div>';
+
+    html += '<div class="range-popover-catcher' + (rangeOpen ? ' open' : '') + '" onclick="closeRangePopover()"></div>';
+    html += '<div class="range-popover' + (rangeOpen ? ' open' : '') + '">' + renderPopoverContent() + '</div>';
+
+    document.getElementById("controls").innerHTML = html;
+    }
+
+    function renderPopoverContent() {
+    if (!rangeOpen) return '';
+
+    var html = '<div class="cal-header">'
+        + '<button class="cal-nav-btn" onclick="changeMonth(-1)">&#8249;</button>'
+        + '<span class="cal-title">' + MONTH_NAMES[calViewMonth] + ' ' + calViewYear + '</span>'
+        + '<button class="cal-nav-btn" onclick="changeMonth(1)">&#8250;</button>'
+        + '</div>';
+
+    html += '<div class="cal-weekdays"><span>M</span><span>T</span><span>W</span>'
+        + '<span>T</span><span>F</span><span>S</span><span>S</span></div>';
+    html += '<div class="cal-grid">' + buildCalendarCells() + '</div>';
+
+    var startDateVal = pendingStart ? fmtDateInput(pendingStart) : '';
+    var endDateVal = pendingEnd ? fmtDateInput(pendingEnd) : startDateVal;
+
+    html += '<div class="range-fields">'
+        + '  <div>'
+        + '    <div class="range-field-label">Start</div>'
+        + '    <div class="range-field-row">'
+        + '      <input type="date" class="range-input date-input" value="' + startDateVal
+        +          '" onchange="onStartDateInput(this.value)">'
+        + '      <input type="time" class="range-input time-input" value="' + startTimeStr
+        +          '" onchange="onStartTimeInput(this.value)">'
+        + '    </div>'
+        + '  </div>'
+        + '  <div>'
+        + '    <div class="range-field-label">End</div>'
+        + '    <div class="range-field-row">'
+        + '      <input type="date" class="range-input date-input" value="' + endDateVal
+        +          '" onchange="onEndDateInput(this.value)">'
+        + '      <input type="time" class="range-input time-input" value="' + endTimeStr
+        +          '" onchange="onEndTimeInput(this.value)">'
+        + '    </div>'
+        + '  </div>'
+        + '</div>';
+
+    html += '<button class="fetch-btn apply-btn" onclick="applyRange()">Apply</button>';
+    html += '<div class="tz-note">Local &middot; ' + tzName + '</div>';
+
+    return html;
+    }
+
+    // build the 6(ish)-row day grid for the month currently in view,
+    // padded with muted leading/trailing days from adjacent months
+    function buildCalendarCells() {
+    var firstOfMonth = new Date(calViewYear, calViewMonth, 1);
+    var startWeekday = (firstOfMonth.getDay() + 6) % 7; // Monday-first
+    var daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+    var daysInPrevMonth = new Date(calViewYear, calViewMonth, 0).getDate();
+
+    var cells = [];
+    for (var i = 0; i < startWeekday; i++) {
+        var pm = calViewMonth - 1, py = calViewYear;
+        if (pm < 0) { pm = 11; py -= 1; }
+        cells.push({ y: py, m: pm, d: daysInPrevMonth - startWeekday + 1 + i, muted: true });
+    }
+    for (var d = 1; d <= daysInMonth; d++) {
+        cells.push({ y: calViewYear, m: calViewMonth, d: d, muted: false });
+    }
+    var rem = cells.length % 7;
+    if (rem !== 0) {
+        var need = 7 - rem;
+        for (var j = 0; j < need; j++) {
+        var nm = calViewMonth + 1, ny = calViewYear;
+        if (nm > 11) { nm = 0; ny += 1; }
+        cells.push({ y: ny, m: nm, d: j + 1, muted: true });
+        }
+    }
+
+    var today = new Date();
+    var html = '';
+    cells.forEach(function(c) {
+        var classes = ['cal-day'];
+        if (c.muted) classes.push('muted');
+        if (c.y === today.getFullYear() && c.m === today.getMonth() && c.d === today.getDate()) classes.push('today');
+        if (pendingStart && c.y === pendingStart.y && c.m === pendingStart.m && c.d === pendingStart.d) classes.push('range-start');
+        if (pendingEnd && c.y === pendingEnd.y && c.m === pendingEnd.m && c.d === pendingEnd.d) classes.push('range-end');
+        if (pendingStart && pendingEnd && isBetween(c, pendingStart, pendingEnd)) classes.push('in-range');
+        html += '<div class="' + classes.join(' ') + '" onclick="selectCalendarDay(' + c.y + ',' + c.m + ',' + c.d + ')">'
+        + c.d + '</div>';
+    });
+    return html;
+    }
+
+    // ─── popover interaction handlers ───
+
+    function toggleRangePopover() {
+    rangeOpen = !rangeOpen;
+    if (rangeOpen) {
+        var s = activeRange ? new Date(activeRange.startMs) : new Date(Date.now() - 3600000);
+        var e = activeRange ? new Date(activeRange.endMs) : new Date();
+        pendingStart = { y: s.getFullYear(), m: s.getMonth(), d: s.getDate() };
+        pendingEnd = { y: e.getFullYear(), m: e.getMonth(), d: e.getDate() };
+        startTimeStr = pad2(s.getHours()) + ":" + pad2(s.getMinutes());
+        endTimeStr = pad2(e.getHours()) + ":" + pad2(e.getMinutes());
+        calViewYear = pendingStart.y;
+        calViewMonth = pendingStart.m;
+    }
+    renderControls();
+    }
+
+    function closeRangePopover() {
+    rangeOpen = false;
+    renderControls();
+    }
+
+    function changeMonth(delta) {
+    calViewMonth += delta;
+    if (calViewMonth < 0) { calViewMonth = 11; calViewYear -= 1; }
+    else if (calViewMonth > 11) { calViewMonth = 0; calViewYear += 1; }
+    renderControls();
+    }
+
+    function selectCalendarDay(y, m, d) {
+    var clicked = { y: y, m: m, d: d };
+    if (!pendingStart || (pendingStart && pendingEnd)) {
+        pendingStart = clicked;
+        pendingEnd = null;
+    } else if (dateKey(clicked) < dateKey(pendingStart)) {
+        pendingEnd = pendingStart;
+        pendingStart = clicked;
+    } else {
+        pendingEnd = clicked;
+    }
+    renderControls();
+    }
+
+    function onStartDateInput(v) {
+    var p = v.split('-');
+    if (p.length === 3) pendingStart = { y: +p[0], m: +p[1] - 1, d: +p[2] };
+    }
+    function onEndDateInput(v) {
+    var p = v.split('-');
+    if (p.length === 3) pendingEnd = { y: +p[0], m: +p[1] - 1, d: +p[2] };
+    }
+    function onStartTimeInput(v) { startTimeStr = v; }
+    function onEndTimeInput(v) { endTimeStr = v; }
+
+    function formatRangeLabel(start, end, st, et) {
+    var sameDay = (start.y === end.y && start.m === end.m && start.d === end.d);
+    var sLabel = MONTH_SHORT[start.m] + ' ' + start.d + ', ' + st;
+    var eLabel = sameDay ? et : (MONTH_SHORT[end.m] + ' ' + end.d + ', ' + et);
+    return sLabel + ' – ' + eLabel;
+    }
+
+    function applyRange() {
+    if (!pendingStart) { alert("Pick a start date on the calendar."); return; }
+    var endD = pendingEnd || pendingStart;
+    var st = startTimeStr || "00:00";
+    var et = endTimeStr || "23:59";
+
+    var startMs = new Date(pendingStart.y, pendingStart.m, pendingStart.d, +st.split(':')[0], +st.split(':')[1]).getTime();
+    var endMs = new Date(endD.y, endD.m, endD.d, +et.split(':')[0], +et.split(':')[1]).getTime();
+
+    if (endMs <= startMs) { alert("End time must be after the start time."); return; }
+
+    activeRange = { startMs: startMs, endMs: endMs, label: formatRangeLabel(pendingStart, endD, st, et) };
+    rangeOpen = false;
+    renderControls();
+    fetchRecords(startMs, endMs);
+    }
+
+    // default view when the page loads and whenever the popover is dismissed
+    // without ever applying a custom range: the last hour of readings
+    function applyDefaultRange() {
+    var now = Date.now();
+    var startMs = now - 3600000;
+    activeRange = { startMs: startMs, endMs: now, label: "Last 1 hour" };
+    renderControls();
+    fetchRecords(startMs, now);
+    }
+
+    // close the popover on Escape, same as clicking outside it
+    document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && rangeOpen) closeRangePopover();
+    });
+
+    // ─── FETCHING ───
+
+    function fetchRecords(startMs, endMs) {
+    document.getElementById("readings-list").innerHTML =
+        '<div class="state-message"><div class="emoji">◎</div>Loading readings...</div>';
+
+    fetch(API + "?start=" + startMs + "&end=" + endMs)
+        .then(function(res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+        })
+        .then(function(data) {
+        renderResults(data);
+        })
+        .catch(function(err) {
+        document.getElementById("readings-list").innerHTML =
+            '<div class="state-message"><div class="emoji">⚠</div>Error: ' + err.message + '</div>';
+        });
+    }
+
+    // ─── CSV EXPORT ───
+
+    function exportCSV() {
+    if (!lastData || lastData.length === 0) {
+        alert("Nothing to export — fetch a time range first.");
+        return;
+    }
+    // sensor -> index in raw.adc[] (firmware fill order)
+    var ADC_INDEX = { MQ131:0, MQ135:1, MQ2:2, MQ3:3, MQ4:4, MQ5:5, MQ6:6, MQ7:7, MQ9:8 };
+    function sensorVoltage(record, sensor) {
+        if (!record.raw || !record.raw.adc) return "";
+        var i = ADC_INDEX[sensor];
+        if (i == null || record.raw.adc[i] == null) return "";
+        return (record.raw.adc[i] / 4095 * 3.3).toFixed(3);
+    }
+
+    var rows = [["timestamp", "gas", "sensor", "voltage_v", "value", "unit", "tier", "osha_mixture_em", "anomaly"]];
+
+    lastData.forEach(function(record) {
+        var ts = record.server_time || new Date(record.timestamp_ms).toISOString();
+        var em = record.osha_mixture_em != null ? record.osha_mixture_em : "";
+        var anomaly = (record.ml && record.ml.anomaly_detected) ? "yes" : "no";
+        record.readings.forEach(function(r) {
+        if (r.gas === "CO2_est") return;   // drop MQ135 estimate; real CO2 added below
+        rows.push([ts, r.gas, r.sensor, sensorVoltage(record, r.sensor), r.value, gasUnit(r.gas), r.tier, em, anomaly]);
+        });
+        // add the real NDIR CO2 as its own row (top-level field, not in readings)
+        if (record.co2_ndir != null && record.co2_ndir !== -1) {
+        rows.push([ts, "CO2", "S88", "", record.co2_ndir, "ppm", "", em, anomaly]);
+        }});
+
+    // quote every field so commas/units don't shift columns
+    var csv = rows.map(function(row) {
+        return row.map(function(cell) {
+        var s = String(cell == null ? "" : cell);
+        return '"' + s.replace(/"/g, '""') + '"';
+        }).join(",");
+    }).join("\n");
+
+    var blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "gas_records_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    }
+
+    // ─── SUMMARY ───
+
+    function renderSummary(data) {
+    if (!data || data.length === 0) {
+        document.getElementById("summary").innerHTML = '';
+        return;
+    }
+
+    // count elevated readings across all records
+    var totalReadings = 0;
+    var warnings = 0;
+    var cautions = 0;
+    var alerts = 0;
+    var peakEm = 0;
+    var anomalies = 0;
+
+    data.forEach(function(record) {
+        if (record.osha_mixture_em > peakEm) peakEm = record.osha_mixture_em;
+        if (record.ml && record.ml.anomaly_detected) anomalies++;
+
+        record.readings.forEach(function(r) {
+        totalReadings++;
+        if (r.tier === "warning") warnings++;
+        else if (r.tier === "caution") cautions++;
+        else if (r.tier === "alert") alerts++;
+        });
+    });
+
+    var html = '<div class="stat-pill">'
+        + '<div class="stat-label">Records</div>'
+        + '<div class="stat-value">' + data.length + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">Warnings</div>'
+        + '<div class="stat-value" style="color:' + (warnings > 0 ? TIER_COLORS.warning : TIER_COLORS.normal) + '">'
+        + warnings + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">Cautions</div>'
+        + '<div class="stat-value" style="color:' + (cautions > 0 ? TIER_COLORS.caution : TIER_COLORS.normal) + '">'
+        + cautions + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">Alerts</div>'
+        + '<div class="stat-value" style="color:' + (alerts > 0 ? TIER_COLORS.alert : TIER_COLORS.normal) + '">'
+        + alerts + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">Peak Em</div>'
+        + '<div class="stat-value" style="color:' + emColor(peakEm) + '">'
+        + fmt(peakEm) + '</div></div>'
+        + '<div class="stat-pill">'
+        + '<div class="stat-label">ML Anomalies</div>'
+        + '<div class="stat-value" style="color:' + (anomalies > 0 ? TIER_COLORS.warning : TIER_COLORS.normal) + '">'
+        + anomalies + '</div></div>';
+
+    document.getElementById("summary").innerHTML = html;
+    }
+
+    // ─── TIMELINE ───
+
+    function renderReadingEntry(record) {
+    var time = record.server_time || new Date(record.timestamp_ms).toISOString();
+    // make time more readable
+    var displayTime = time.replace("T", "  ").replace("Z", " UTC");
+    var em = record.osha_mixture_em || 0;
+
+    // collect unique tier dots for quick visual
+    var tierSet = {};
+    record.readings.forEach(function(r) {
+        if (r.tier !== "normal" && r.tier !== "unknown") {
+        tierSet[r.tier] = true;
+        }
+    });
+
+    var dotsHtml = '<div class="entry-tier-dots">';
+    if (tierSet.warning) dotsHtml += '<div class="tier-dot" style="background:' + TIER_COLORS.warning + '"></div>';
+    if (tierSet.caution) dotsHtml += '<div class="tier-dot" style="background:' + TIER_COLORS.caution + '"></div>';
+    if (tierSet.alert) dotsHtml += '<div class="tier-dot" style="background:' + TIER_COLORS.alert + '"></div>';
+    if (Object.keys(tierSet).length === 0) dotsHtml += '<div class="tier-dot" style="background:' + TIER_COLORS.normal + '"></div>';
+    dotsHtml += '</div>';
+
+    // build detail grid
+    var detailHtml = '<div class="entry-details"><div class="detail-grid">';
+
+    // sort readings: elevated first, then alphabetical
+    var sortedReadings = record.readings.slice().sort(function(a, b) {
+        var tierOrder = { warning: 0, caution: 1, alert: 2, unknown: 3, normal: 4 };
+        var ta = tierOrder[a.tier] != null ? tierOrder[a.tier] : 5;
+        var tb = tierOrder[b.tier] != null ? tierOrder[b.tier] : 5;
+        if (ta !== tb) return ta - tb;
+        return a.gas.localeCompare(b.gas);
+    });
+
+    sortedReadings.forEach(function(r) {
+        if (r.gas === "CO2_est") return;   // hide MQ135's rough CO2 estimate from record detail
+        var tc = TIER_COLORS[r.tier] || TIER_COLORS.unknown;
+        var bg = TIER_BG[r.tier] || TIER_BG.unknown;
+
+        detailHtml += '<div class="detail-item">'
+        + '<div>'
+        + '<span class="detail-gas">' + r.gas + '</span>'
+        + '<span class="detail-gas-sensor"> · ' + r.sensor + '</span>'
+        + '</div>'
+        + '<div>'
+        + '<span class="detail-value" style="color:' + tc + '">' + fmt(r.value) + '</span>'
+        + '<span class="detail-unit">' + gasUnit(r.gas) + '</span>'
+        + '<span class="detail-tier" style="color:' + tc + ';background:' + bg + '">' + r.tier + '</span>'
+        + '</div>'
+        + '</div>';
+    });
+
+    detailHtml += '</div></div>';
+
+    return '<div class="reading-entry">'
+        + '<div class="entry-header">'
+        + '<span class="entry-time">' + displayTime + '</span>'
+        + '<div class="entry-meta">'
+        + dotsHtml
+        + '<span class="entry-em">Em: <span style="color:' + emColor(em) + '">' + fmt(em) + '</span></span>'
+        + '<span class="entry-expand-icon">▸</span>'
+        + '</div>'
+        + '</div>'
+        + detailHtml
+        + '</div>';
+    }
+
+    // ─── RENDER RESULTS ───
+
+    function renderResults(data) {
+    lastData = data;
+    renderSummary(data);
+
+    if (!data || data.length === 0) {
+        document.getElementById("readings-list").innerHTML =
+        '<div class="state-message"><div class="emoji">○</div>No readings found for this time range.</div>';
+        document.getElementById("footer").innerHTML = '';
+        return;
+    }
+
+    var html = '';
+    data.forEach(function(record) {
+        html += renderReadingEntry(record);
+    });
+    document.getElementById("readings-list").innerHTML = html;
+
+    document.getElementById("footer").innerHTML =
+        '<span>ETV Frellmann · Gas Sensor Monitoring System</span>'
+        + '<span>Showing ' + data.length + ' records · Region: us-east-2</span>';
+    }
+
+    // ─── CLICK TO EXPAND ───
+
+    document.getElementById("readings-list").addEventListener("click", function(e) {
+    var entry = e.target.closest(".reading-entry");
+    if (entry) {
+        entry.classList.toggle("expanded");
+    }
+    });
+
+    // ─── START ───
+
+    renderControls();
+    applyDefaultRange();
+
+  </script>
+
+  <script src="wave-bg.js"></script>
+
+</body>
+</html>
