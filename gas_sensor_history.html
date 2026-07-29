@@ -41,6 +41,10 @@
     /* ─── reset & base ─── */
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+   html, body {
+   overflow-x: hidden;
+   }
+
     body {
     background: #0b1017;
     color: #d4dce8;
@@ -71,6 +75,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    row-gap: 10px;
     gap: 18px;
     margin-bottom: 16px;
     }
